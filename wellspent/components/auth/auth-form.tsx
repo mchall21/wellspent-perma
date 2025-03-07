@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -37,6 +37,33 @@ export function AuthForm({ type }: AuthFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check if user is already authenticated
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        setIsAuthenticated(true);
+        router.push("/assessment");
+      }
+    };
+    
+    checkAuth();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth state changed:", event);
+      if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+        setIsAuthenticated(true);
+        router.push("/assessment");
+      }
+    });
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -83,7 +110,10 @@ export function AuthForm({ type }: AuthFormProps) {
         }
         
         setSuccess(true);
-        setTimeout(() => router.push("/assessment"), 1500);
+        // Force navigation after a short delay
+        setTimeout(() => {
+          window.location.href = "/assessment";
+        }, 1000);
       } else {
         // Sign in
         const { error } = await supabase.auth.signInWithPassword({
@@ -94,13 +124,29 @@ export function AuthForm({ type }: AuthFormProps) {
         if (error) throw error;
         
         setSuccess(true);
-        setTimeout(() => router.push("/assessment"), 1500);
+        // Force navigation after a short delay
+        setTimeout(() => {
+          window.location.href = "/assessment";
+        }, 1000);
       }
     } catch (error: any) {
       setError(error.message || "An error occurred during authentication");
     } finally {
       setIsLoading(false);
     }
+  }
+
+  // If already authenticated, redirect
+  if (isAuthenticated) {
+    return (
+      <div className="w-full max-w-md mx-auto space-y-6">
+        <Alert className="bg-green-50 border-green-500 text-green-700">
+          <AlertDescription>
+            You are already signed in. Redirecting to assessment...
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
   }
 
   return (

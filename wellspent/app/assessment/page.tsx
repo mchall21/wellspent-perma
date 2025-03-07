@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { PageContainer } from "@/components/ui/page-container";
 import { StartAssessment } from "@/components/assessment/start-assessment";
 import { supabase } from "@/lib/supabase";
+import { Loader2 } from "lucide-react";
 
 export default function AssessmentPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isClient, setIsClient] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     // Set isClient to true when component mounts (client-side only)
@@ -22,13 +24,14 @@ export default function AssessmentPage() {
         
         if (error) {
           console.error("Error checking auth:", error);
-          router.push("/auth/signin");
+          setAuthError("Error checking authentication status. Please try again.");
           return;
         }
         
         if (!data.session) {
           console.log("No active session found, redirecting to sign in");
-          router.push("/auth/signin");
+          // Don't redirect automatically, let the user see the message
+          setAuthError("You need to sign in to access the assessment.");
           return;
         }
         
@@ -37,7 +40,7 @@ export default function AssessmentPage() {
         
         if (userError || !userData.user) {
           console.error("Error getting user or no user found:", userError);
-          router.push("/auth/signin");
+          setAuthError("Error verifying your account. Please sign in again.");
           return;
         }
         
@@ -45,7 +48,7 @@ export default function AssessmentPage() {
         setIsAuthenticated(true);
       } catch (error) {
         console.error("Unexpected error during auth check:", error);
-        router.push("/auth/signin");
+        setAuthError("An unexpected error occurred. Please try again.");
       } finally {
         setIsLoading(false);
       }
@@ -54,7 +57,7 @@ export default function AssessmentPage() {
     if (isClient) {
       checkAuth();
     }
-  }, [isClient, router]);
+  }, [isClient]);
 
   // Don't render anything during SSR to prevent hydration mismatch
   if (!isClient) {
@@ -64,8 +67,9 @@ export default function AssessmentPage() {
   if (isLoading) {
     return (
       <PageContainer>
-        <div className="flex justify-center items-center h-64">
-          <p>Loading...</p>
+        <div className="flex flex-col justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="mt-4">Loading assessment...</p>
         </div>
       </PageContainer>
     );
@@ -74,8 +78,14 @@ export default function AssessmentPage() {
   if (!isAuthenticated) {
     return (
       <PageContainer>
-        <div className="flex justify-center items-center h-64">
-          <p>You must be signed in to access this page. Redirecting...</p>
+        <div className="flex flex-col justify-center items-center h-64 space-y-4">
+          <p className="text-red-500">{authError || "You must be signed in to access this page."}</p>
+          <button 
+            onClick={() => router.push("/auth/signin")}
+            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+          >
+            Sign In
+          </button>
         </div>
       </PageContainer>
     );

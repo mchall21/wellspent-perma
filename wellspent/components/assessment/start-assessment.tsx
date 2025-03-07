@@ -11,11 +11,10 @@ export function StartAssessment() {
   const handleStart = async () => {
     setIsLoading(true);
     try {
-      // Use Next.js router instead of direct navigation
-      router.push("/assessment/questions");
+      // Use window.location for more reliable navigation
+      window.location.href = "/assessment/questions";
     } catch (error) {
       console.error("Error starting assessment:", error);
-    } finally {
       setIsLoading(false);
     }
   };

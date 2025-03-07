@@ -6,6 +6,7 @@ import type { NextRequest } from 'next/server';
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
+  const next = requestUrl.searchParams.get('next') || '/assessment';
 
   if (code) {
     const cookieStore = cookies();
@@ -14,14 +15,13 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get: (name) => {
-            const cookie = cookieStore.get(name);
-            return cookie?.value;
+          get(name: string) {
+            return cookieStore.get(name)?.value;
           },
-          set: (name, value, options) => {
+          set(name: string, value: string, options: any) {
             cookieStore.set({ name, value, ...options });
           },
-          remove: (name, options) => {
+          remove(name: string, options: any) {
             cookieStore.set({ name, value: '', ...options });
           },
         },
@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code);
   }
 
-  // URL to redirect to after sign in process completes
-  return NextResponse.redirect(requestUrl.origin);
+  // Redirect to the assessment page or specified next URL
+  return NextResponse.redirect(new URL(next, requestUrl.origin));
 }
 
 export const dynamic = 'force-dynamic'; 
