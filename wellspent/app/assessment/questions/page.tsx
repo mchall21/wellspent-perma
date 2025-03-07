@@ -1,20 +1,16 @@
 "use client";
 
-import React from "react";
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { 
   HeartIcon, 
-  BriefcaseIcon, 
-  UserIcon, 
-  UsersIcon,
-  ClockIcon,
-  ArrowUpIcon,
-  ShieldIcon
+  BriefcaseIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PageContainer } from "@/components/ui/page-container";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 // Define types
 type Context = "personal" | "work";
@@ -29,19 +25,333 @@ interface Response {
 
 interface QuestionComponentProps {
   questionId: string;
+  text: string;
+  personalContextLabel: string;
+  workContextLabel: string;
+  scaleStartLabel: string;
+  scaleEndLabel: string;
+  onValueChange: (questionId: string, context: Context, value: ResponseValue) => void;
+  getValue: (questionId: string, context: Context) => number;
 }
 
 interface Question {
   id: string;
   category: string;
   text: string;
-  component: (props: QuestionComponentProps) => React.ReactElement;
+  personalContextLabel: string;
+  workContextLabel: string;
+  scaleStartLabel: string;
+  scaleEndLabel: string;
+  scaleStart: number;
+  scaleEnd: number;
 }
+
+// Standard question component for all questions
+const QuestionComponent = ({ 
+  questionId, 
+  text,
+  personalContextLabel,
+  workContextLabel,
+  scaleStartLabel,
+  scaleEndLabel,
+  onValueChange,
+  getValue
+}: QuestionComponentProps) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="rounded-xl border p-4 bg-gradient-to-r from-blue-50 to-blue-100">
+      <div className="flex items-center mb-4">
+        <HeartIcon className="mr-2 h-5 w-5 text-blue-600" />
+        <span className="font-medium text-blue-800">{personalContextLabel}</span>
+      </div>
+      
+      <div className="space-y-3">
+        <Slider 
+          defaultValue={[getValue(questionId, "personal")]} 
+          max={10} 
+          step={1}
+          className="py-4" 
+          onValueChange={(value) => onValueChange(questionId, "personal", value[0])}
+        />
+        <div className="flex justify-between text-sm">
+          <div className="text-xs text-blue-700">{scaleStartLabel}</div>
+          <div className="text-xs text-blue-700">{scaleEndLabel}</div>
+        </div>
+      </div>
+    </div>
+    
+    <div className="rounded-xl border p-4 bg-gradient-to-r from-violet-50 to-violet-100">
+      <div className="flex items-center mb-4">
+        <BriefcaseIcon className="mr-2 h-5 w-5 text-violet-600" />
+        <span className="font-medium text-violet-800">{workContextLabel}</span>
+      </div>
+      
+      <div className="space-y-3">
+        <Slider 
+          defaultValue={[getValue(questionId, "work")]} 
+          max={10} 
+          step={1}
+          className="py-4" 
+          onValueChange={(value) => onValueChange(questionId, "work", value[0])}
+        />
+        <div className="flex justify-between text-sm">
+          <div className="text-xs text-violet-700">{scaleStartLabel}</div>
+          <div className="text-xs text-violet-700">{scaleEndLabel}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 export default function AssessmentQuestions() {
   // State to store all responses
   const [responses, setResponses] = useState<Response>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Load questions from the first file
+  useEffect(() => {
+    // Questions adapted from the first file
+    const permavQuestions: Question[] = [
+      // POSITIVE EMOTIONS (P)
+      {
+        id: "joy",
+        category: "P",
+        text: "How often do you experience genuine joy or contentment?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Rarely",
+        scaleEndLabel: "Very often",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "optimism",
+        category: "P",
+        text: "How optimistic are you about your future?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Not optimistic",
+        scaleEndLabel: "Very optimistic",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "gratitude",
+        category: "P",
+        text: "How often do you feel grateful for aspects of your life?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Rarely",
+        scaleEndLabel: "Very often",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      
+      // ENGAGEMENT (E)
+      {
+        id: "flow",
+        category: "E",
+        text: "How often do you lose track of time because you're completely absorbed in what you're doing?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Time drags",
+        scaleEndLabel: "Time flies",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "absorbed_interest",
+        category: "E",
+        text: "When doing activities, how deeply engaged do you typically become?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Easily distracted",
+        scaleEndLabel: "Completely immersed",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "flow_channel",
+        category: "E",
+        text: "How well do your challenges match your skills and abilities?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Poor match",
+        scaleEndLabel: "Perfect match",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      
+      // RELATIONSHIPS (R)
+      {
+        id: "social_support",
+        category: "R",
+        text: "How supported do you feel by the people around you?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Not supported",
+        scaleEndLabel: "Very supported",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "connection_quality",
+        category: "R",
+        text: "How strong are your connections with the important people in your life?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Distant",
+        scaleEndLabel: "Close",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "psychological_safety",
+        category: "R",
+        text: "How safe do you feel being your authentic self with others?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Unsafe",
+        scaleEndLabel: "Completely safe",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "social_connection",
+        category: "R",
+        text: "How connected do you feel to others around you?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Disconnected",
+        scaleEndLabel: "Deeply connected",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      
+      // MEANING (M)
+      {
+        id: "purpose",
+        category: "M",
+        text: "How clear is your sense of purpose and direction?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Uncertain",
+        scaleEndLabel: "Clear direction",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "contribution_value",
+        category: "M",
+        text: "How much do you feel what you do matters and makes a difference?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Minimal impact",
+        scaleEndLabel: "Significant impact",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "values_alignment",
+        category: "M",
+        text: "How aligned are your daily activities with your core values?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Misaligned",
+        scaleEndLabel: "Perfectly aligned",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "lasting_impact",
+        category: "M",
+        text: "How much lasting impact do you feel your efforts will have?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Limited impact",
+        scaleEndLabel: "Lasting legacy",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      
+      // ACCOMPLISHMENT (A)
+      {
+        id: "goal_achievement",
+        category: "A",
+        text: "How often do you achieve the important goals you set for yourself?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Rarely",
+        scaleEndLabel: "Very often",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "competence",
+        category: "A",
+        text: "How competent do you feel in the activities that are important to you?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Beginner",
+        scaleEndLabel: "Expert",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "growth_mindset",
+        category: "A",
+        text: "How much do you embrace challenges as opportunities to learn and grow?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Fixed mindset",
+        scaleEndLabel: "Growth mindset",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      
+      // VITALITY (V)
+      {
+        id: "energy_levels",
+        category: "V",
+        text: "How would you rate your energy levels throughout a typical day?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Drained",
+        scaleEndLabel: "Energized",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "physical_wellbeing",
+        category: "V",
+        text: "How satisfied are you with your physical health and well-being?",
+        personalContextLabel: "Personal Life",
+        workContextLabel: "Work Life",
+        scaleStartLabel: "Unsatisfied",
+        scaleEndLabel: "Very satisfied",
+        scaleStart: 0,
+        scaleEnd: 10
+      },
+      {
+        id: "work_life_balance",
+        category: "V",
+        text: "How satisfied are you with your work-life balance?",
+        personalContextLabel: "Personal Satisfaction",
+        workContextLabel: "Work Satisfaction",
+        scaleStartLabel: "Unsatisfied",
+        scaleEndLabel: "Very satisfied",
+        scaleStart: 0,
+        scaleEnd: 10
+      }
+    ];
+
+    setQuestions(permavQuestions);
+    setLoading(false);
+  }, []);
 
   // Update response values
   const handleValueChange = (questionId: string, context: Context, value: ResponseValue) => {
@@ -70,729 +380,233 @@ export default function AssessmentQuestions() {
   };
 
   // Get current response values
-  const getValue = (questionId: string, context: Context, defaultValue = 5): number => {
-    return responses[questionId]?.[context] ?? defaultValue;
+  const getValue = (questionId: string, context: Context): number => {
+    return responses[questionId]?.[context] ?? 5;
   };
 
   // Submit the assessment
-  const handleSubmit = () => {
-    console.log("Assessment responses:", responses);
-    alert("Assessment completed! Check console for responses.");
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    
+    try {
+      // Get the current user
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        setError("You must be logged in to submit an assessment.");
+        console.error("Authentication error:", userError);
+        return;
+      }
+      
+      console.log("Submitting assessment for user:", userData.user.id);
+      
+      // Create a submission record
+      const { data: submissionData, error: submissionError } = await supabase
+        .from("assessment_submissions")
+        .insert({
+          user_id: userData.user.id,
+          completed_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (submissionError || !submissionData) {
+        console.error("Error creating submission:", submissionError);
+        throw new Error(`Error creating submission: ${submissionError?.message || "Unknown error"}`);
+      }
+      
+      console.log("Created submission:", submissionData);
+      
+      // Format data for submission to assessment_response table (singular)
+      const formattedResponsesSingular = Object.entries(responses).map(([questionId, contextValues]) => ({
+        submission_id: submissionData.id,
+        question_id: questionId,
+        personal_response_value: contextValues.personal || 5,
+        work_response_value: contextValues.work || 5
+      }));
+      
+      // Insert into assessment_response table (singular)
+      const { error: responsesSingularError } = await supabase
+        .from("assessment_response")
+        .insert(formattedResponsesSingular);
+      
+      if (responsesSingularError) {
+        console.error("Error saving to assessment_response:", responsesSingularError);
+        console.log("Trying alternative table...");
+      } else {
+        console.log("Successfully saved to assessment_response table");
+      }
+      
+      // Also format for assessment_responses table (plural) which has a different structure
+      interface PluralResponse {
+        submission_id: string;
+        question_id: string;
+        score: number;
+        context: 'personal' | 'work';
+      }
+      
+      const formattedResponsesPlural: PluralResponse[] = [];
+      
+      // Add personal context responses
+      Object.entries(responses).forEach(([questionId, contextValues]) => {
+        // Add personal context
+        formattedResponsesPlural.push({
+          submission_id: submissionData.id,
+          question_id: questionId,
+          score: contextValues.personal || 5,
+          context: 'personal'
+        });
+        
+        // Add work context
+        formattedResponsesPlural.push({
+          submission_id: submissionData.id,
+          question_id: questionId,
+          score: contextValues.work || 5,
+          context: 'work'
+        });
+      });
+      
+      // Insert into assessment_responses table (plural)
+      const { error: responsesPluralError } = await supabase
+        .from("assessment_responses")
+        .insert(formattedResponsesPlural);
+      
+      if (responsesPluralError) {
+        console.error("Error saving to assessment_responses:", responsesPluralError);
+        
+        // If both inserts failed, throw an error
+        if (responsesSingularError) {
+          throw new Error(`Failed to save responses to either table: ${responsesPluralError.message}`);
+        }
+      } else {
+        console.log("Successfully saved to assessment_responses table");
+      }
+      
+      // Calculate PERMA-V scores
+      // Group questions by category and calculate average scores
+      interface CategoryScore {
+        personal: { sum: number; count: number };
+        workplace: { sum: number; count: number };
+      }
+      
+      const categoryScores: Record<string, CategoryScore> = {};
+      
+      // Get all questions to access their categories
+      const questionsWithCategories = questions.map(q => ({
+        id: q.id,
+        category: q.category
+      }));
+      
+      // Calculate scores for each category and context
+      for (const [questionId, contextValues] of Object.entries(responses)) {
+        const question = questionsWithCategories.find(q => q.id === questionId);
+        if (!question) continue;
+        
+        const category = question.category;
+        if (!categoryScores[category]) {
+          categoryScores[category] = {
+            personal: { sum: 0, count: 0 },
+            workplace: { sum: 0, count: 0 }
+          };
+        }
+        
+        if (contextValues.personal !== undefined) {
+          categoryScores[category].personal.sum += contextValues.personal;
+          categoryScores[category].personal.count++;
+        }
+        
+        if (contextValues.work !== undefined) {
+          categoryScores[category].workplace.sum += contextValues.work;
+          categoryScores[category].workplace.count++;
+        }
+      }
+      
+      // Calculate averages and format for database
+      const resultsToInsert = [];
+      
+      for (const [category, contexts] of Object.entries(categoryScores)) {
+        if (contexts.personal.count > 0) {
+          resultsToInsert.push({
+            submission_id: submissionData.id,
+            category,
+            score: contexts.personal.sum / contexts.personal.count,
+            context: 'personal'
+          });
+        }
+        
+        if (contexts.workplace.count > 0) {
+          resultsToInsert.push({
+            submission_id: submissionData.id,
+            category,
+            score: contexts.workplace.sum / contexts.workplace.count,
+            context: 'workplace'
+          });
+        }
+      }
+      
+      // Calculate overall PERMA score
+      const permaCategories = ['P', 'E', 'R', 'M', 'A'];
+      const personalPermaScores = permaCategories
+        .filter(cat => categoryScores[cat]?.personal?.count > 0)
+        .map(cat => categoryScores[cat].personal.sum / categoryScores[cat].personal.count);
+      
+      const workplacePermaScores = permaCategories
+        .filter(cat => categoryScores[cat]?.workplace?.count > 0)
+        .map(cat => categoryScores[cat].workplace.sum / categoryScores[cat].workplace.count);
+      
+      if (personalPermaScores.length > 0) {
+        const personalPermaAvg = personalPermaScores.reduce((sum, score) => sum + score, 0) / personalPermaScores.length;
+        resultsToInsert.push({
+          submission_id: submissionData.id,
+          category: 'PERMA_overall',
+          score: personalPermaAvg,
+          context: 'personal'
+        });
+      }
+      
+      if (workplacePermaScores.length > 0) {
+        const workplacePermaAvg = workplacePermaScores.reduce((sum, score) => sum + score, 0) / workplacePermaScores.length;
+        resultsToInsert.push({
+          submission_id: submissionData.id,
+          category: 'PERMA_overall',
+          score: workplacePermaAvg,
+          context: 'workplace'
+        });
+      }
+      
+      // Insert results
+      if (resultsToInsert.length > 0) {
+        const { error: resultsError } = await supabase
+          .from("assessment_results")
+          .insert(resultsToInsert);
+        
+        if (resultsError) {
+          console.error("Error saving results:", resultsError);
+          // Continue anyway since the responses are saved
+        }
+      }
+      
+      // If we got here, the submission was successful
+      console.log("Assessment submitted successfully!");
+      router.push("/assessment/complete");
+    } catch (error) {
+      console.error("Error submitting assessment:", error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // All questions with their formats
-  const questions: Question[] = [
-    // POSITIVE EMOTIONS (P)
-    // Question 1: Joy & Contentment
-    {
-      id: "joy",
-      category: "P",
-      text: "How often do you experience genuine joy or contentment?",
-      component: ({ questionId }: QuestionComponentProps) => (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="rounded-xl border p-4 bg-gradient-to-r from-blue-50 to-blue-100">
-            <div className="flex items-center mb-4">
-              <HeartIcon className="mr-2 h-5 w-5 text-blue-600" />
-              <span className="font-medium text-blue-800">Personal Life</span>
-            </div>
-            
-            <div className="space-y-3">
-              <Slider 
-                defaultValue={[getValue(questionId, "personal")]} 
-                max={10} 
-                step={1}
-                className="py-4" 
-                onValueChange={(value) => handleValueChange(questionId, "personal", value[0])}
-              />
-              <div className="flex justify-between text-sm">
-                <div className="flex flex-col items-center">
-                  <span className="text-2xl">😔</span>
-                  <span className="text-xs mt-1 text-blue-700">Rarely</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-2xl">😊</span>
-                  <span className="text-xs mt-1 text-blue-700">Very often</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-xl border p-4 bg-gradient-to-r from-violet-50 to-violet-100">
-            <div className="flex items-center mb-4">
-              <BriefcaseIcon className="mr-2 h-5 w-5 text-violet-600" />
-              <span className="font-medium text-violet-800">Work Life</span>
-            </div>
-            
-            <div className="space-y-3">
-              <Slider 
-                defaultValue={[getValue(questionId, "work")]} 
-                max={10} 
-                step={1}
-                className="py-4" 
-                onValueChange={(value) => handleValueChange(questionId, "work", value[0])}
-              />
-              <div className="flex justify-between text-sm">
-                <div className="flex flex-col items-center">
-                  <span className="text-2xl">😔</span>
-                  <span className="text-xs mt-1 text-violet-700">Rarely</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-2xl">😊</span>
-                  <span className="text-xs mt-1 text-violet-700">Very often</span>
-                </div>
-              </div>
-            </div>
-          </div>
+  // Show loading state
+  if (loading) {
+    return (
+      <PageContainer>
+        <div className="flex justify-center items-center h-64">
+          <p>Loading assessment questions...</p>
         </div>
-      )
-    },
-    
-    // Question 2: Optimism
-    {
-      id: "optimism",
-      category: "P",
-      text: "How optimistic are you about your future?",
-      component: ({ questionId }: QuestionComponentProps) => {
-        const personalValue = getValue(questionId, "personal");
-        const workValue = getValue(questionId, "work");
-        
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center mb-3">
-                <HeartIcon className="mr-2 h-5 w-5 text-blue-600" />
-                <span className="font-medium">Personal Life</span>
-              </div>
-              
-              <div className="relative h-40 flex items-center justify-center mb-4">
-                {/* Shield visualization */}
-                <div className="relative h-32 w-28">
-                  <svg viewBox="0 0 100 120" className="h-full w-full">
-                    <path 
-                      d="M50,0 L100,30 L100,70 Q100,120 50,120 Q0,120 0,70 L0,30 Z" 
-                      fill="none" 
-                      stroke="#e5e7eb" 
-                      strokeWidth="6"
-                    />
-                    <path 
-                      d="M50,0 L100,30 L100,70 Q100,120 50,120 Q0,120 0,70 L0,30 Z" 
-                      fill={`rgba(37, 99, 235, ${personalValue * 0.1})`} 
-                      stroke="#2563eb" 
-                      strokeWidth="6"
-                      strokeDasharray={`${personalValue * 30} 300`}
-                    />
-                  </svg>
-                  
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <UserIcon className="h-10 w-10 text-blue-500" />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex justify-between text-sm mb-2">
-                <span>Unsafe</span>
-                <span>Completely safe</span>
-              </div>
-              
-              <Slider 
-                defaultValue={[personalValue]} 
-                max={10} 
-                step={1}
-                onValueChange={(value) => handleValueChange(questionId, "personal", value[0])}
-              />
-            </div>
-            
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center mb-3">
-                <BriefcaseIcon className="mr-2 h-5 w-5 text-violet-600" />
-                <span className="font-medium">Work Life</span>
-              </div>
-              
-              <div className="relative h-40 flex items-center justify-center mb-4">
-                {/* Shield visualization */}
-                <div className="relative h-32 w-28">
-                  <svg viewBox="0 0 100 120" className="h-full w-full">
-                    <path 
-                      d="M50,0 L100,30 L100,70 Q100,120 50,120 Q0,120 0,70 L0,30 Z" 
-                      fill="none" 
-                      stroke="#e5e7eb" 
-                      strokeWidth="6"
-                    />
-                    <path 
-                      d="M50,0 L100,30 L100,70 Q100,120 50,120 Q0,120 0,70 L0,30 Z" 
-                      fill={`rgba(124, 58, 237, ${workValue * 0.1})`} 
-                      stroke="#7c3aed" 
-                      strokeWidth="6"
-                      strokeDasharray={`${workValue * 30} 300`}
-                    />
-                  </svg>
-                  
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <UserIcon className="h-10 w-10 text-violet-500" />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex justify-between text-sm mb-2">
-                <span>Unsafe</span>
-                <span>Completely safe</span>
-              </div>
-              
-              <Slider 
-                defaultValue={[workValue]} 
-                max={10} 
-                step={1}
-                onValueChange={(value) => handleValueChange(questionId, "work", value[0])}
-              />
-            </div>
-          </div>
-        );
-      }
-    },
-    
-    // Question 16: Alignment With Values (M)
-    {
-      id: "values_alignment",
-      category: "M",
-      text: "How aligned are your daily activities with your core values?",
-      component: ({ questionId }: QuestionComponentProps) => {
-        const personalValue = getValue(questionId, "personal");
-        const workValue = getValue(questionId, "work");
-        
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center mb-3">
-                <HeartIcon className="mr-2 h-5 w-5 text-blue-600" />
-                <span className="font-medium">Personal Life</span>
-              </div>
-              
-              <div className="relative h-40 flex items-center justify-center mb-4">
-                {/* Value compass */}
-                <div className="relative h-32 w-32 rounded-full border-2 border-gray-200">
-                  {/* Background sectors for values */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="h-full w-full flex flex-col">
-                      <div className="h-1/2 flex">
-                        <div className="w-1/2 bg-blue-50 rounded-tl-full"></div>
-                        <div className="w-1/2 bg-green-50 rounded-tr-full"></div>
-                      </div>
-                      <div className="h-1/2 flex">
-                        <div className="w-1/2 bg-amber-50 rounded-bl-full"></div>
-                        <div className="w-1/2 bg-violet-50 rounded-br-full"></div>
-                      </div>
-                    </div>
-                    
-                    {/* Tiny value labels */}
-                    <div className="absolute top-3 left-1/2 transform -translate-x-1/2 text-xs">Connection</div>
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs">Growth</div>
-                    <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 text-xs">Security</div>
-                    <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-xs">Freedom</div>
-                  </div>
-                  
-                  {/* Alignment indicator needle */}
-                  <div 
-                    className="absolute top-1/2 left-1/2 h-1 w-16 bg-blue-600 transform -translate-y-1/2 origin-left transition-transform duration-700"
-                    style={{ transform: `translateX(-50%) rotate(${personalValue * 36}deg)` }}
-                  ></div>
-                  
-                  <div className="absolute top-1/2 left-1/2 h-4 w-4 rounded-full bg-blue-600 transform -translate-x-1/2 -translate-y-1/2"></div>
-                  
-                  {/* Value display */}
-                  <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 font-medium text-sm">
-                    {personalValue}/10
-                  </div>
-                </div>
-              </div>
-              
-              <Slider 
-                defaultValue={[personalValue]} 
-                max={10} 
-                step={1}
-                onValueChange={(value) => handleValueChange(questionId, "personal", value[0])}
-              />
-            </div>
-            
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center mb-3">
-                <BriefcaseIcon className="mr-2 h-5 w-5 text-violet-600" />
-                <span className="font-medium">Work Life</span>
-              </div>
-              
-              <div className="relative h-40 flex items-center justify-center mb-4">
-                {/* Value compass */}
-                <div className="relative h-32 w-32 rounded-full border-2 border-gray-200">
-                  {/* Background sectors for values */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="h-full w-full flex flex-col">
-                      <div className="h-1/2 flex">
-                        <div className="w-1/2 bg-violet-50 rounded-tl-full"></div>
-                        <div className="w-1/2 bg-green-50 rounded-tr-full"></div>
-                      </div>
-                      <div className="h-1/2 flex">
-                        <div className="w-1/2 bg-amber-50 rounded-bl-full"></div>
-                        <div className="w-1/2 bg-blue-50 rounded-br-full"></div>
-                      </div>
-                    </div>
-                    
-                    {/* Tiny value labels */}
-                    <div className="absolute top-3 left-1/2 transform -translate-x-1/2 text-xs">Innovation</div>
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs">Excellence</div>
-                    <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 text-xs">Stability</div>
-                    <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-xs">Collaboration</div>
-                  </div>
-                  
-                  {/* Alignment indicator needle */}
-                  <div 
-                    className="absolute top-1/2 left-1/2 h-1 w-16 bg-violet-600 transform -translate-y-1/2 origin-left transition-transform duration-700"
-                    style={{ transform: `translateX(-50%) rotate(${workValue * 36}deg)` }}
-                  ></div>
-                  
-                  <div className="absolute top-1/2 left-1/2 h-4 w-4 rounded-full bg-violet-600 transform -translate-x-1/2 -translate-y-1/2"></div>
-                  
-                  {/* Value display */}
-                  <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 font-medium text-sm">
-                    {workValue}/10
-                  </div>
-                </div>
-              </div>
-              
-              <Slider 
-                defaultValue={[workValue]} 
-                max={10} 
-                step={1}
-                onValueChange={(value) => handleValueChange(questionId, "work", value[0])}
-              />
-            </div>
-          </div>
-        );
-      }
-    },
-    
-    // Question 17: Growth Mindset (A)
-    {
-      id: "growth_mindset",
-      category: "A",
-      text: "How much do you embrace challenges as opportunities to learn and grow?",
-      component: ({ questionId }: QuestionComponentProps) => {
-        const personalValue = getValue(questionId, "personal");
-        const workValue = getValue(questionId, "work");
-        
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center mb-3">
-                <HeartIcon className="mr-2 h-5 w-5 text-blue-600" />
-                <span className="font-medium">Personal Life</span>
-              </div>
-              
-              <div className="relative h-48 flex items-center justify-center mb-4">
-                {/* Growth spiral visualization */}
-                <svg width="160" height="160" viewBox="0 0 160 160">
-                  {/* Create a spiral path that grows with the value */}
-                  <path 
-                    d={`M 80 80 
-                       Q ${80 + personalValue * 2} ${80 - personalValue * 3} ${80 + personalValue * 5} ${80 - personalValue * 1}
-                       Q ${80 + personalValue * 8} ${80 + personalValue * 4} ${80 + personalValue * 3} ${80 + personalValue * 7}
-                       Q ${80 - personalValue * 3} ${80 + personalValue * 10} ${80 - personalValue * 8} ${80 + personalValue * 5}
-                       Q ${80 - personalValue * 13} ${80 - personalValue * 2} ${80 - personalValue * 6} ${80 - personalValue * 9}
-                       Q ${80 + personalValue * 4} ${80 - personalValue * 16} ${80 + personalValue * 13} ${80 - personalValue * 10}`}
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
-                  
-                  {/* Small circles along the path representing growth points */}
-                  <circle cx="80" cy="80" r="3" fill="#3b82f6" />
-                  <circle cx={`${80 + personalValue * 5}`} cy={`${80 - personalValue * 1}`} r="3" fill="#3b82f6" />
-                  <circle cx={`${80 + personalValue * 3}`} cy={`${80 + personalValue * 7}`} r="3" fill="#3b82f6" />
-                  <circle cx={`${80 - personalValue * 8}`} cy={`${80 + personalValue * 5}`} r="3" fill="#3b82f6" />
-                  <circle cx={`${80 - personalValue * 6}`} cy={`${80 - personalValue * 9}`} r="3" fill="#3b82f6" />
-                  <circle cx={`${80 + personalValue * 13}`} cy={`${80 - personalValue * 10}`} r="5" fill="#3b82f6" />
-                  
-                  {/* Value indicator */}
-                  <text x="75" y="85" fontSize="12" fill="#3b82f6" fontWeight="bold">{personalValue}</text>
-                </svg>
-              </div>
-              
-              <div className="flex justify-between text-sm mb-2">
-                <span>Fixed mindset</span>
-                <span>Growth mindset</span>
-              </div>
-              
-              <Slider 
-                defaultValue={[personalValue]} 
-                max={10} 
-                step={1}
-                onValueChange={(value) => handleValueChange(questionId, "personal", value[0])}
-              />
-            </div>
-            
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center mb-3">
-                <BriefcaseIcon className="mr-2 h-5 w-5 text-violet-600" />
-                <span className="font-medium">Work Life</span>
-              </div>
-              
-              <div className="relative h-48 flex items-center justify-center mb-4">
-                {/* Growth spiral visualization */}
-                <svg width="160" height="160" viewBox="0 0 160 160">
-                  {/* Create a spiral path that grows with the value */}
-                  <path 
-                    d={`M 80 80 
-                       Q ${80 + workValue * 2} ${80 - workValue * 3} ${80 + workValue * 5} ${80 - workValue * 1}
-                       Q ${80 + workValue * 8} ${80 + workValue * 4} ${80 + workValue * 3} ${80 + workValue * 7}
-                       Q ${80 - workValue * 3} ${80 + workValue * 10} ${80 - workValue * 8} ${80 + workValue * 5}
-                       Q ${80 - workValue * 13} ${80 - workValue * 2} ${80 - workValue * 6} ${80 - workValue * 9}
-                       Q ${80 + workValue * 4} ${80 - workValue * 16} ${80 + workValue * 13} ${80 - workValue * 10}`}
-                    fill="none"
-                    stroke="#7c3aed"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
-                  
-                  {/* Small circles along the path representing growth points */}
-                  <circle cx="80" cy="80" r="3" fill="#7c3aed" />
-                  <circle cx={`${80 + workValue * 5}`} cy={`${80 - workValue * 1}`} r="3" fill="#7c3aed" />
-                  <circle cx={`${80 + workValue * 3}`} cy={`${80 + workValue * 7}`} r="3" fill="#7c3aed" />
-                  <circle cx={`${80 - workValue * 8}`} cy={`${80 + workValue * 5}`} r="3" fill="#7c3aed" />
-                  <circle cx={`${80 - workValue * 6}`} cy={`${80 - workValue * 9}`} r="3" fill="#7c3aed" />
-                  <circle cx={`${80 + workValue * 13}`} cy={`${80 - workValue * 10}`} r="5" fill="#7c3aed" />
-                  
-                  {/* Value indicator */}
-                  <text x="75" y="85" fontSize="12" fill="#7c3aed" fontWeight="bold">{workValue}</text>
-                </svg>
-              </div>
-              
-              <div className="flex justify-between text-sm mb-2">
-                <span>Fixed mindset</span>
-                <span>Growth mindset</span>
-              </div>
-              
-              <Slider 
-                defaultValue={[workValue]} 
-                max={10} 
-                step={1}
-                onValueChange={(value) => handleValueChange(questionId, "work", value[0])}
-              />
-            </div>
-          </div>
-        );
-      }
-    },
-    
-    // Question 18: Work-Life Balance (V)
-    {
-      id: "work_life_balance",
-      category: "V",
-      text: "How satisfied are you with your work-life balance?",
-      component: ({ questionId }: QuestionComponentProps) => {
-        const personalValue = getValue(questionId, "personal");
-        const workValue = getValue(questionId, "work");
-        
-        return (
-          <div className="relative h-64 w-full border rounded-xl p-4">
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-              {/* Seesaw visualization */}
-              <div className="relative w-80 h-2 bg-gray-300 rounded-full transition-transform duration-500"
-                style={{ 
-                  transform: `rotate(${(personalValue - workValue) * 3}deg)`,
-                  transformOrigin: 'center'
-                }}
-              >
-                {/* Personal life side */}
-                <div className="absolute -left-16 -top-24 w-32 h-20 bg-blue-100 border border-blue-300 rounded-lg flex flex-col items-center justify-center">
-                  <HeartIcon className="h-6 w-6 text-blue-600 mb-1" />
-                  <span className="text-sm font-medium">Personal</span>
-                  <span className="text-lg font-bold">{personalValue}/10</span>
-                </div>
-                
-                {/* Work life side */}
-                <div className="absolute -right-16 -top-24 w-32 h-20 bg-violet-100 border border-violet-300 rounded-lg flex flex-col items-center justify-center">
-                  <BriefcaseIcon className="h-6 w-6 text-violet-600 mb-1" />
-                  <span className="text-sm font-medium">Work</span>
-                  <span className="text-lg font-bold">{workValue}/10</span>
-                </div>
-              </div>
-              
-              {/* Center support pillar */}
-              <div className="absolute top-1 left-1/2 transform -translate-x-1/2 -translate-y-full w-4 h-16 bg-gray-400 rounded-t-lg"></div>
-              
-              {/* Base */}
-              <div className="absolute top-16 left-1/2 transform -translate-x-1/2 w-20 h-4 bg-gray-500 rounded-lg"></div>
-            </div>
-            
-            <div className="absolute bottom-4 left-0 w-full grid grid-cols-2 gap-4 px-4">
-              <div>
-                <span className="block text-xs mb-1 text-blue-700">Personal Life Satisfaction</span>
-                <Slider 
-                  defaultValue={[personalValue]} 
-                  max={10} 
-                  step={1}
-                  onValueChange={(value) => handleValueChange(questionId, "personal", value[0])}
-                />
-              </div>
-              
-              <div>
-                <span className="block text-xs mb-1 text-violet-700">Work Life Satisfaction</span>
-                <Slider 
-                  defaultValue={[workValue]} 
-                  max={10} 
-                  step={1}
-                  onValueChange={(value) => handleValueChange(questionId, "work", value[0])}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      }
-    },
-    
-    // Question 19: Social Connection (P/R)
-    {
-      id: "social_connection",
-      category: "R",
-      text: "How connected do you feel to others around you?",
-      component: ({ questionId }: QuestionComponentProps) => {
-        const personalValue = getValue(questionId, "personal");
-        const workValue = getValue(questionId, "work");
-        
-        return (
-          <div className="relative h-80 w-full border rounded-xl p-4">
-            <div className="absolute top-3 left-0 w-full flex justify-between px-8">
-              <div className="flex flex-col items-center">
-                <HeartIcon className="h-6 w-6 text-blue-600" />
-                <span className="text-sm">Personal Connections</span>
-              </div>
-              
-              <div className="flex flex-col items-center">
-                <BriefcaseIcon className="h-6 w-6 text-violet-600" />
-                <span className="text-sm">Work Connections</span>
-              </div>
-            </div>
-            
-            {/* Connection networks visualization */}
-            <div className="absolute top-16 left-0 w-full flex justify-between px-8">
-              <div className="relative h-40 w-40">
-                {/* Personal connection network */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-100 rounded-full h-12 w-12 flex items-center justify-center border-2 border-blue-300 z-10">
-                  <UserIcon className="h-6 w-6 text-blue-600" />
-                </div>
-                
-                {/* Connection nodes based on value */}
-                {Array.from({length: personalValue}).map((_, i) => (
-                  <div 
-                    key={i} 
-                    className="absolute bg-blue-50 border border-blue-200 rounded-full h-8 w-8 flex items-center justify-center"
-                    style={{
-                      top: `${50 + Math.sin(i * (Math.PI * 2 / personalValue)) * 40}%`,
-                      left: `${50 + Math.cos(i * (Math.PI * 2 / personalValue)) * 40}%`,
-                    }}
-                  >
-                    <UserIcon className="h-4 w-4 text-blue-500" />
-                  </div>
-                ))}
-                
-                {/* Connection lines */}
-                {Array.from({length: personalValue}).map((_, i) => (
-                  <svg 
-                    key={i} 
-                    className="absolute top-0 left-0 h-full w-full"
-                    style={{ zIndex: 0 }}
-                  >
-                    <line 
-                      x1="50%" 
-                      y1="50%" 
-                      x2={`${50 + Math.cos(i * (Math.PI * 2 / personalValue)) * 40}%`} 
-                      y2={`${50 + Math.sin(i * (Math.PI * 2 / personalValue)) * 40}%`} 
-                      stroke="#93c5fd" 
-                      strokeWidth="2" 
-                    />
-                  </svg>
-                ))}
-                
-                <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-sm font-medium">
-                  {personalValue}/10
-                </div>
-              </div>
-              
-              <div className="relative h-40 w-40">
-                {/* Work connection network */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-violet-100 rounded-full h-12 w-12 flex items-center justify-center border-2 border-violet-300 z-10">
-                  <UserIcon className="h-6 w-6 text-violet-600" />
-                </div>
-                
-                {/* Connection nodes based on value */}
-                {Array.from({length: workValue}).map((_, i) => (
-                  <div 
-                    key={i} 
-                    className="absolute bg-violet-50 border border-violet-200 rounded-full h-8 w-8 flex items-center justify-center"
-                    style={{
-                      top: `${50 + Math.sin(i * (Math.PI * 2 / workValue)) * 40}%`,
-                      left: `${50 + Math.cos(i * (Math.PI * 2 / workValue)) * 40}%`,
-                    }}
-                  >
-                    <UserIcon className="h-4 w-4 text-violet-500" />
-                  </div>
-                ))}
-                
-                {/* Connection lines */}
-                {Array.from({length: workValue}).map((_, i) => (
-                  <svg 
-                    key={i} 
-                    className="absolute top-0 left-0 h-full w-full"
-                    style={{ zIndex: 0 }}
-                  >
-                    <line 
-                      x1="50%" 
-                      y1="50%" 
-                      x2={`${50 + Math.cos(i * (Math.PI * 2 / workValue)) * 40}%`} 
-                      y2={`${50 + Math.sin(i * (Math.PI * 2 / workValue)) * 40}%`} 
-                      stroke="#ddd6fe" 
-                      strokeWidth="2" 
-                    />
-                  </svg>
-                ))}
-                
-                <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-sm font-medium">
-                  {workValue}/10
-                </div>
-              </div>
-            </div>
-            
-            <div className="absolute bottom-4 left-0 w-full grid grid-cols-2 gap-4 px-4">
-              <div>
-                <span className="block text-xs mb-1 text-blue-700">Personal Connections</span>
-                <Slider 
-                  defaultValue={[personalValue]} 
-                  max={10} 
-                  step={1}
-                  onValueChange={(value) => handleValueChange(questionId, "personal", value[0])}
-                />
-              </div>
-              
-              <div>
-                <span className="block text-xs mb-1 text-violet-700">Work Connections</span>
-                <Slider 
-                  defaultValue={[workValue]} 
-                  max={10} 
-                  step={1}
-                  onValueChange={(value) => handleValueChange(questionId, "work", value[0])}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      }
-    },
-    
-    // Question 20: Legacy & Impact (M/A)
-    {
-      id: "legacy_impact",
-      category: "M",
-      text: "How much lasting impact do you feel your efforts will have?",
-      component: ({ questionId }: QuestionComponentProps) => {
-        const personalValue = getValue(questionId, "personal");
-        const workValue = getValue(questionId, "work");
-        
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center mb-3">
-                <HeartIcon className="mr-2 h-5 w-5 text-blue-600" />
-                <span className="font-medium">Personal Life</span>
-              </div>
-              
-              <div className="relative h-48 flex items-center justify-center mb-4">
-                {/* Tree visualization */}
-                <div className="relative w-40 h-40">
-                  {/* Tree trunk */}
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-4 h-20 bg-amber-700 rounded-sm"></div>
-                  
-                  {/* Tree foliage - size based on value */}
-                  <div 
-                    className="absolute bottom-20 left-1/2 transform -translate-x-1/2 rounded-full bg-green-500 transition-all duration-700"
-                    style={{
-                      width: `${personalValue * 8}px`,
-                      height: `${personalValue * 8}px`,
-                      opacity: 0.8
-                    }}
-                  ></div>
-                  
-                  {/* Value indicator */}
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 -mb-8 font-medium">
-                    {personalValue}/10
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex justify-between text-sm mb-2">
-                <span>Limited impact</span>
-                <span>Lasting legacy</span>
-              </div>
-              
-              <Slider 
-                defaultValue={[personalValue]} 
-                max={10} 
-                step={1}
-                onValueChange={(value) => handleValueChange(questionId, "personal", value[0])}
-              />
-            </div>
-            
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center mb-3">
-                <BriefcaseIcon className="mr-2 h-5 w-5 text-violet-600" />
-                <span className="font-medium">Work Life</span>
-              </div>
-              
-              <div className="relative h-48 flex items-center justify-center mb-4">
-                {/* Building visualization */}
-                <div className="relative w-40 h-40">
-                  {/* Building base */}
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-24 h-4 bg-gray-600 rounded-sm"></div>
-                  
-                  {/* Building structure - height based on value */}
-                  <div 
-                    className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-20 bg-violet-500 transition-all duration-700"
-                    style={{
-                      height: `${workValue * 3}px`
-                    }}
-                  >
-                    {/* Windows */}
-                    {Array.from({length: Math.floor(workValue / 2)}).map((_, i) => (
-                      <div key={i} className="absolute left-0 w-full flex justify-around" style={{ bottom: i * 10 + 5 }}>
-                        <div className="h-3 w-3 bg-yellow-100"></div>
-                        <div className="h-3 w-3 bg-yellow-100"></div>
-                        <div className="h-3 w-3 bg-yellow-100"></div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Value indicator */}
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 -mb-8 font-medium">
-                    {workValue}/10
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex justify-between text-sm mb-2">
-                <span>Limited impact</span>
-                <span>Lasting legacy</span>
-              </div>
-              
-              <Slider 
-                defaultValue={[workValue]} 
-                max={10} 
-                step={1}
-                onValueChange={(value) => handleValueChange(questionId, "work", value[0])}
-              />
-            </div>
-          </div>
-        );
-      }
-    },
-  ];
+      </PageContainer>
+    );
+  }
 
   // Get current question
   const currentQuestion = questions[currentQuestionIndex];
@@ -823,15 +637,36 @@ export default function AssessmentQuestions() {
         
         {/* Question */}
         <Card className="mb-8 p-6">
-          <h2 className="text-2xl font-bold mb-6 text-center">
-            {currentQuestion.text}
-          </h2>
+          <div className="flex items-center mb-4">
+            <div className="bg-primary/10 text-primary font-medium rounded-full w-8 h-8 flex items-center justify-center mr-3">
+              {currentQuestion.category}
+            </div>
+            <h2 className="text-xl font-bold">
+              {currentQuestion.text}
+            </h2>
+          </div>
           
-          {/* Dynamic component based on question type */}
+          {/* Question component */}
           <div className="mb-6">
-            {currentQuestion.component({ questionId: currentQuestion.id })}
+            <QuestionComponent 
+              questionId={currentQuestion.id}
+              text={currentQuestion.text}
+              personalContextLabel={currentQuestion.personalContextLabel}
+              workContextLabel={currentQuestion.workContextLabel}
+              scaleStartLabel={currentQuestion.scaleStartLabel}
+              scaleEndLabel={currentQuestion.scaleEndLabel}
+              onValueChange={handleValueChange}
+              getValue={getValue}
+            />
           </div>
         </Card>
+        
+        {/* Error message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-800 rounded">
+            {error}
+          </div>
+        )}
         
         {/* Navigation buttons */}
         <div className="flex justify-between">
@@ -848,37 +683,16 @@ export default function AssessmentQuestions() {
               Next
             </Button>
           ) : (
-            <Button onClick={handleSubmit} className="bg-green-600 hover:bg-green-700">
-              Complete Assessment
+            <Button 
+              onClick={handleSubmit} 
+              className="bg-green-600 hover:bg-green-700"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Submitting..." : "Complete Assessment"}
             </Button>
           )}
         </div>
       </div>
-      
-      {/* Add CSS for animations */}
-      <style jsx global>{`
-        @keyframes pulse {
-          0% { transform: scale(1); opacity: 0.8; }
-          50% { transform: scale(1.1); opacity: 1; }
-          100% { transform: scale(1); opacity: 0.8; }
-        }
-        
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        
-        @keyframes wave {
-          0% { transform: translateX(0); }
-          50% { transform: translateX(-50%); }
-          100% { transform: translateX(0); }
-        }
-        
-        @keyframes ripple {
-          0% { transform: scale(1); opacity: 0.8; }
-          100% { transform: scale(1.5); opacity: 0; }
-        }
-      `}</style>
     </PageContainer>
   );
 }

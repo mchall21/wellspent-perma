@@ -1,11 +1,11 @@
 "use client";
 
 import { DualSlider } from "./dual-slider";
-import { Question, Response } from "@/lib/hooks/use-assessment";
+import { COMPONENT_TYPES, getQuestionComponent } from "@/lib/question-mapping";
 
 type QuestionCardProps = {
-  question: Question;
-  responses: Response[];
+  question: any;
+  responses: any[];
   onPersonalResponseChange: (questionId: string, score: number) => void;
   onWorkResponseChange: (questionId: string, score: number) => void;
 };
@@ -16,9 +16,6 @@ export function QuestionCard({
   onPersonalResponseChange,
   onWorkResponseChange,
 }: QuestionCardProps) {
-  // Debug the question structure
-  console.log("Question data:", question);
-
   const response = responses.find(
     (r) => r.questionId === question.id
   );
@@ -42,7 +39,9 @@ export function QuestionCard({
   const scaleEnd = question.scale_end || 10;
   const startLabel = question.scale_start_label || "Low";
   const endLabel = question.scale_end_label || "High";
-
+  
+  // For the quick implementation, just use the default component
+  // You can expand this with more components later
   return (
     <div className="bg-card rounded-lg border p-6">
       <div className="mb-6">

@@ -18,6 +18,8 @@ export type Question = {
   scale_end_label: string;
   question_order: number;
   active?: boolean;
+  component_type?: string;
+  component_config?: any;
   [key: string]: any; // Allow for additional properties
 };
 

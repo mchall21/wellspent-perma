@@ -38,12 +38,10 @@ interface CategoryScore {
 interface SubmissionWithCount {
   id: string;
   created_at: string;
-  assessment_response?: {
+  completed_at?: string;
+  assessment_responses: {
     count: number;
-  };
-  assessment_responses?: {
-    count: number;
-  };
+  }[];
 }
 
 export default function ResultsPage() {
@@ -69,9 +67,10 @@ export default function ResultsPage() {
         const { data, error: submissionsError } = await supabase
           .from("assessment_submissions")
           .select(`
-            *,
-            assessment_response(count),
-            assessment_responses(count)
+            id,
+            created_at,
+            completed_at,
+            assessment_responses:assessment_responses(count)
           `)
           .eq("user_id", userData.user.id)
           .order("created_at", { ascending: false });
@@ -154,8 +153,9 @@ export default function ResultsPage() {
               </CardHeader>
               <CardContent className="pb-2">
                 <p className="text-sm">
-                  {(submission.assessment_response?.count || 0) + 
-                   (submission.assessment_responses?.count || 0)} questions answered
+                  {submission.assessment_responses && submission.assessment_responses.length > 0 
+                    ? submission.assessment_responses[0].count 
+                    : 0} questions answered
                 </p>
               </CardContent>
               <CardFooter>

@@ -94,7 +94,69 @@ export default function ResultsPage() {
           if (resultsData && resultsData.length > 0) {
             setResults(resultsData);
           } else {
-            setError("No results found for this assessment.");
+            // If no results found, try to calculate them from responses
+            const { data: responsesData, error: responsesError } = await supabase
+              .from("assessment_responses")
+              .select("*, assessment_questions!inner(*)")
+              .eq("submission_id", submissionId);
+              
+            if (responsesError) {
+              throw responsesError;
+            }
+            
+            if (responsesData && responsesData.length > 0) {
+              // Calculate results from responses
+              const calculatedResults: CategoryScore[] = [];
+              const categoryScores: Record<string, { personal: { sum: number, count: number }, workplace: { sum: number, count: number } }> = {};
+              
+              // Group by category and calculate sums
+              responsesData.forEach(response => {
+                const category = response.assessment_questions.category;
+                if (!categoryScores[category]) {
+                  categoryScores[category] = {
+                    personal: { sum: 0, count: 0 },
+                    workplace: { sum: 0, count: 0 }
+                  };
+                }
+                
+                if (response.personal_response_value !== null) {
+                  categoryScores[category].personal.sum += response.personal_response_value;
+                  categoryScores[category].personal.count++;
+                }
+                
+                if (response.work_response_value !== null) {
+                  categoryScores[category].workplace.sum += response.work_response_value;
+                  categoryScores[category].workplace.count++;
+                }
+              });
+              
+              // Calculate averages
+              Object.entries(categoryScores).forEach(([category, contexts]) => {
+                if (contexts.personal.count > 0) {
+                  calculatedResults.push({
+                    category,
+                    score: contexts.personal.sum / contexts.personal.count,
+                    context: 'personal'
+                  });
+                }
+                
+                if (contexts.workplace.count > 0) {
+                  calculatedResults.push({
+                    category,
+                    score: contexts.workplace.sum / contexts.workplace.count,
+                    context: 'workplace'
+                  });
+                }
+              });
+              
+              if (calculatedResults.length > 0) {
+                setResults(calculatedResults);
+              } else {
+                setError("No results could be calculated for this assessment.");
+              }
+            } else {
+              setError("No responses found for this assessment.");
+            }
           }
         } else {
           setError("Assessment not found.");
