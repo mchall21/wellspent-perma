@@ -20,15 +20,30 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Get session and user profile
-  const session = await getSession();
-  const profile = session ? await getUserProfile() : null;
+  // Get session and user profile with error handling
+  let session = null;
+  let profile = null;
   
-  // Extract user information
+  try {
+    session = await getSession();
+    if (session) {
+      try {
+        profile = await getUserProfile();
+      } catch (profileError) {
+        console.error("Error fetching user profile:", profileError);
+        // Continue without profile data
+      }
+    }
+  } catch (sessionError) {
+    console.error("Error fetching session:", sessionError);
+    // Continue without session data
+  }
+  
+  // Extract user information with fallbacks for everything
   const isAuthenticated = !!session;
-  const userRole = profile?.role || session?.user?.user_metadata?.role;
-  const userName = profile?.name || session?.user?.user_metadata?.name || session?.user?.email?.split('@')[0];
-  const userEmail = profile?.email || session?.user?.email;
+  const userRole = profile?.role || session?.user?.user_metadata?.role || 'user';
+  const userName = profile?.name || session?.user?.user_metadata?.name || session?.user?.email?.split('@')[0] || 'Guest';
+  const userEmail = profile?.email || session?.user?.email || '';
 
   return (
     <html lang="en" suppressHydrationWarning>
