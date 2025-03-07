@@ -1,7 +1,6 @@
-// File: AssessmentQuestions.jsx
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { 
@@ -2125,7 +2124,9 @@ export default function AssessmentQuestions() {
         
         <Card className="p-6 mb-6">
           <h3 className="text-xl font-medium mb-6">{questions[currentQuestionIndex].text}</h3>
-          {questions[currentQuestionIndex].component({ questionId: questions[currentQuestionIndex].id })}
+          {React.createElement(questions[currentQuestionIndex].component, { 
+            questionId: questions[currentQuestionIndex].id 
+          })}
         </Card>
         
         <div className="flex justify-between">
