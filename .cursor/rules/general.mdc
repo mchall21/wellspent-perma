@@ -1,0 +1,10 @@
+---
+description: Follow these rules for every request
+globs: 
+alwaysApply: true
+---
+- we are building a well-being assessment tool
+- Find the steps in @project-steps.md
+- Work on whatever steps I tell you to and only work on those steps. I will tell you when to proceed to the next step.
+- Once complete, mark as complete. 
+- Use standard shadcn components for everything you possibly can. Where impossible, ask me before you create custom components.
