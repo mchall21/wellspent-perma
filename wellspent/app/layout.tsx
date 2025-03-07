@@ -15,8 +15,9 @@ export const metadata: Metadata = {
   description: "Financial wellness assessment and resources",
 };
 
-// Set this to force dynamic rendering in production
+// Explicitly force dynamic rendering - critical for preventing build errors
 export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
 
 export default async function RootLayout({
   children,
