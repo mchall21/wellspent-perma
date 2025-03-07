@@ -4,19 +4,30 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Database } from "./database-types";
+import { cache } from "react";
 
-// Get the user session
-export async function getSession() {
+// Check if we're in build/generate phase to avoid cookie access
+const isBuildTime = () => {
+  return process.env.NEXT_PHASE === 'phase-production-build';
+};
+
+// Create a cached server client to avoid multiple instances
+export const createClient = cache(() => {
+  if (isBuildTime()) {
+    // Return a dummy client during build
+    return null;
+  }
+  
   try {
-    // Create Supabase client with properly awaited cookies
-    const cookieStore = await cookies();
-    const supabase = createServerClient<Database>(
+    const cookieStore = cookies();
+    return createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name) {
-            return cookieStore.get(name)?.value;
+            const cookie = cookieStore.get(name);
+            return cookie?.value;
           },
           set() {
             // Server components can't set cookies
@@ -27,6 +38,22 @@ export async function getSession() {
         },
       }
     );
+  } catch (error) {
+    console.error("Error creating Supabase client:", error);
+    return null;
+  }
+});
+
+// Get the user session
+export async function getSession() {
+  try {
+    // Skip during build time
+    if (isBuildTime()) {
+      return null;
+    }
+    
+    const supabase = createClient();
+    if (!supabase) return null;
     
     // Get session
     const { data, error } = await supabase.auth.getSession();
@@ -46,31 +73,18 @@ export async function getSession() {
 // Get the user profile
 export async function getUserProfile() {
   try {
-    const session = await getSession();
+    // Skip during build time
+    if (isBuildTime()) {
+      return null;
+    }
     
+    const session = await getSession();
     if (!session) {
       return null;
     }
     
-    // Create Supabase client with properly awaited cookies
-    const cookieStore = await cookies();
-    const supabase = createServerClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name) {
-            return cookieStore.get(name)?.value;
-          },
-          set() {
-            // Server components can't set cookies
-          },
-          remove() {
-            // Server components can't remove cookies
-          },
-        },
-      }
-    );
+    const supabase = createClient();
+    if (!supabase) return null;
     
     // Get user profile
     const { data, error } = await supabase
@@ -93,6 +107,11 @@ export async function getUserProfile() {
 
 // Require authentication or redirect to sign in
 export async function requireAuth() {
+  // Skip during build time
+  if (isBuildTime()) {
+    return null;
+  }
+  
   const session = await getSession();
   if (!session) {
     redirect("/auth/signin");
@@ -102,6 +121,11 @@ export async function requireAuth() {
 
 // Require admin role or redirect
 export async function requireAdmin() {
+  // Skip during build time
+  if (isBuildTime()) {
+    return { session: null, profile: null };
+  }
+  
   const session = await getSession();
   if (!session) {
     redirect("/auth/signin");
@@ -117,6 +141,11 @@ export async function requireAdmin() {
 
 // Require coach role or redirect
 export async function requireCoach() {
+  // Skip during build time
+  if (isBuildTime()) {
+    return { session: null, profile: null };
+  }
+  
   const session = await getSession();
   if (!session) {
     redirect("/auth/signin");

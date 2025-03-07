@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { getSession } from "@/lib/auth";
 import { Header } from "@/components/ui/header";
 import { Footer } from "@/components/ui/footer";
 import { AuthNav } from "@/components/auth/auth-nav";
@@ -16,20 +15,17 @@ export const metadata: Metadata = {
   description: "Financial wellness assessment and resources",
 };
 
+// Set this to force dynamic rendering in production
+export const dynamic = 'force-dynamic';
+
 export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Get session for initial server-side state
-  let session = null;
-  
-  try {
-    session = await getSession();
-  } catch (sessionError) {
-    console.error("Error fetching session:", sessionError);
-    // Continue without session data
-  }
+  // We'll fetch the session client-side instead to avoid build-time cookie access
+  // This prevents static generation errors with cookies
+  const initialSession = null;
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -40,7 +36,7 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider initialSession={session}>
+          <AuthProvider initialSession={initialSession}>
             <Header />
             <main>{children}</main>
             <Footer />

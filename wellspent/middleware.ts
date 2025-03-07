@@ -3,6 +3,12 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  // Don't run during build/static generation
+  // This is critical for Vercel deployment to work correctly
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -41,16 +47,19 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-// Only run middleware on these paths
+// Update matcher to be more selective about which routes require authentication
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public (public files)
-     */
+    // Apply authentication middleware to these routes
+    '/assessment/:path*',
+    '/profile/:path*',
+    '/dashboard/:path*',
+    '/results/:path*',
+    '/teams/:path*',
+    '/insights/:path*',
+    '/auth/:path*',
+    '/debug',
+    // Exclude static routes, images, etc.
     '/((?!_next/static|_next/image|favicon.ico|public).*)',
   ],
 }; 
