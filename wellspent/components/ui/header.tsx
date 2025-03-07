@@ -5,20 +5,11 @@ import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/auth/user-menu";
 import { MobileNav } from "@/components/ui/mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useAuth } from "@/contexts/auth-context";
 
-interface HeaderProps {
-  isAuthenticated?: boolean;
-  userRole?: string;
-  userName?: string;
-  userEmail?: string;
-}
-
-export function Header({
-  isAuthenticated = false,
-  userRole,
-  userName,
-  userEmail,
-}: HeaderProps) {
+export function Header() {
+  const { isAuthenticated, user, isLoading } = useAuth();
+  
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background">
       <div className="container flex h-16 items-center space-x-4 sm:justify-between sm:space-x-0">
@@ -47,7 +38,7 @@ export function Header({
                 >
                   Resources
                 </Link>
-                {userRole === 'coach' && (
+                {user?.role === 'coach' && (
                   <Link
                     href="/teams"
                     className="flex items-center text-lg font-medium transition-colors hover:text-foreground/80 sm:text-sm"
@@ -55,7 +46,7 @@ export function Header({
                     Teams
                   </Link>
                 )}
-                {userRole === 'admin' && (
+                {user?.role === 'admin' && (
                   <Link
                     href="/admin"
                     className="flex items-center text-lg font-medium transition-colors hover:text-foreground/80 sm:text-sm"
@@ -70,8 +61,11 @@ export function Header({
         <div className="flex flex-1 items-center justify-end space-x-4">
           <nav className="flex items-center space-x-2">
             <ThemeToggle />
-            {isAuthenticated ? (
-              <UserMenu userName={userName} userEmail={userEmail} />
+            {isLoading ? (
+              // Show a loading state
+              <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse"></div>
+            ) : isAuthenticated ? (
+              <UserMenu />
             ) : (
               <>
                 <Link href="/auth/signin">
@@ -85,7 +79,7 @@ export function Header({
               </>
             )}
           </nav>
-          <MobileNav isAuthenticated={isAuthenticated} userRole={userRole} />
+          <MobileNav isAuthenticated={isAuthenticated} userRole={user?.role} />
         </div>
       </div>
     </header>
